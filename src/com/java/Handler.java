@@ -6,11 +6,14 @@ import java.util.StringTokenizer;
 import java.util.concurrent.TimeUnit;
 
 /**
+ * 辅助 Handler 每个线程的实际策略
+ *
  * @author JR Chan
  */
 public class Handler implements Runnable {
-    private final DatagramSocket serverSocketU;   //服务器DatagramSocket
     private final Socket socket;            //线程池传过来的参数Socket
+    private final DatagramSocket serverSocketU;   //服务器DatagramSocket
+    private final SocketAddress socketAddress;    //UDP 的发送目的地址
     private String currentPath;     //每次新连接都跳转到服务器指定目录
     BufferedReader br;
     BufferedWriter bw;
@@ -23,11 +26,21 @@ public class Handler implements Runnable {
      * @param socket 线程池传过来的Tcp socket
      * @throws SocketException socket错误
      */
-    public Handler(final String cwd, Socket socket) throws SocketException {
+    public Handler(final String cwd, Socket socket, DatagramSocket serverSocketU) throws IOException {
         this.currentPath = cwd;
         this.socket = socket;
-        //随机端口
-        serverSocketU = new DatagramSocket();
+        this.serverSocketU = serverSocketU;
+        System.out.println("<" + socket.getInetAddress() + "："
+                + socket.getPort() + "> 连接成功");
+
+        initStream();   //初始化流
+
+        pw.println("CWD: " + currentPath);  //告知客户端当前工作路径
+
+        String clientPort = br.readLine();     //客户端的随机端口号
+        InetAddress clientIP = socket.getInetAddress(); //客户端 IP
+        socketAddress = new InetSocketAddress(
+                clientIP, Integer.parseInt(clientPort));    //初始化Udp的地址信息 未做非法地址保护
     }
 
     /**
@@ -46,80 +59,51 @@ public class Handler implements Runnable {
         pw = new PrintWriter(bw, true);
     }
 
+    /**
+     * 每个线程的实际执行策略
+     */
     @Override
     public void run() {
         try {
-            int udpPort = 2020; //题目要求端口
-            InetAddress clientIP = socket.getInetAddress(); //客户端 IP
-            SocketAddress socketAddress = new InetSocketAddress(clientIP, udpPort);
-
-            System.out.println("<" + socket.getInetAddress() + "："
-                    + socket.getPort() + "> 连接成功");
-
-            initStream();
-            pw.println("CWD: " + currentPath);  //告知 client 当前工作路径
-
             String info; //接收用户输入的信息
-
             while ((info = br.readLine()) != null) {
-
                 info = info.trim(); //去掉首尾空格
                 System.out.println("user's command: " + info); //输出用户发送的消息
 
-                if (info.equals("ls")) {    //打印目录
+                //打印目录
+                if (info.equals("ls")) {
                     pw.println(dirList(currentPath));
-                } else if (info.startsWith("cd ") || info.startsWith("cd..")) { //跳转目录
-                    String dir = info.substring(2).trim();  //切片，去空格
-
+                }
+                //跳转目录
+                else if (info.startsWith("cd ") || info.startsWith("cd..")) {
+                    String dir = info.substring(2).trim();  //切片去空格
                     String result = moveCwd(dir, currentPath);
-                    //判断是否成功
                     if (result.equals("unknown dir")) {
                         pw.println(result);
                     } else {
-                        currentPath = result;
+                        currentPath = result;   //跳转成功则更新当前目录
                         pw.println(result + " > OK");
                     }
-                } else if (info.startsWith("get ")) {
-                    String file = info.substring(3).trim(); //切片，去空格
+                }
+                //获取文件
+                else if (info.startsWith("get ")) {
+                    String file = info.substring(3).trim(); //切片去空格
                     String result = getFile(file, currentPath);
                     if (result.equals("unknown file")) {
                         pw.println(result);
                     } else {
-                        //得到文件名
-                        StringTokenizer st = new StringTokenizer(result, "\\");
-                        String name = "";
-                        while (st.hasMoreTokens()) {
-                            name = st.nextToken();
-                        }
-
-                        File tmp = new File(result);
-                        String space = String.valueOf(tmp.length());
-                        pw.println(name + ";" + space);
-
-                        //文件转换成 byte[] 输出
-                        FileInputStream fis = new FileInputStream(tmp);
-                        byte[] part = new byte[513];
-
-                        //纠错编号
-                        int index = 0;
-                        int size;
-                        while ((size = fis.read(part, 1, 512)) != -1) {
-                            //加入标号
-                            part[0] = (byte) index;
-                            index += 1;
-                            //创建 Udp 包裹
-                            DatagramPacket datagramPacket = new DatagramPacket(part,
-                                    size + 1, socketAddress);
-                            serverSocketU.send(datagramPacket);
-                            TimeUnit.MICROSECONDS.sleep(1); //限制传输速度
-                        }
-
-                        fis.close();
+                        sentFile(result);
                     }
-                } else if (info.equals("bye")) { //如果用户输入“bye”就退出
+                }
+                //退出
+                else if (info.equals("bye")) {
+                    System.out.println("<" + socket.getInetAddress() + "："
+                            + socket.getPort() + "> 已退出");
                     break;
-                } else {
-                    pw.println("unknown cmd"); //无法解析指令
+                }
+                //无法解析指令
+                else {
+                    pw.println("unknown cmd");
                 }
                 //再加一行标识让 client 端的 readLine() 函数能退出阻塞
                 pw.println("end up this command");
@@ -185,12 +169,10 @@ public class Handler implements Runnable {
         File file = new File(currentPath + "\\" + dir);
         //处理绝对路径问题
         if (!file.exists()) {
-//            System.out.println(currentPath + "\\" + dir + "try space");
             file = new File(dir);
         }
 
         if (file.isDirectory()) {  //是目录 返回跳转成功
-//            System.out.println(file.getCanonicalPath() + "try space");
             return file.getCanonicalPath();
         } else {    //不是目录或者路径不存在
             return "unknown dir";
@@ -218,5 +200,44 @@ public class Handler implements Runnable {
         } else {  //不是文件
             return "unknown file";
         }
+    }
+
+    /**
+     * 实现文件的UDP传输
+     *
+     * @param path get命令得到的绝对路径
+     * @throws IOException          文件创建错误
+     * @throws InterruptedException sleep时发生中断错误
+     */
+    private void sentFile(String path) throws IOException, InterruptedException {
+        //得到文件名
+        StringTokenizer st = new StringTokenizer(path, "\\");
+        String name = "";
+        while (st.hasMoreTokens()) {
+            name = st.nextToken();
+        }
+        //new出文件
+        File tmp = new File(path);
+        String space = String.valueOf(tmp.length());
+        //把文件名及大小发给客户端
+        pw.println(name + ";" + space);
+
+        //文件转换成 byte[] 输出
+        FileInputStream fis = new FileInputStream(tmp);
+        byte[] part = new byte[513];
+
+        //纠错编号
+        int index = 0;
+        int size;
+        while ((size = fis.read(part, 1, 512)) != -1) {
+            //加入标号
+            part[0] = (byte) index;
+            index += 1;
+            DatagramPacket datagramPacket = new DatagramPacket(part,
+                    size + 1, socketAddress);   //创建 Udp 包裹
+            serverSocketU.send(datagramPacket);
+            TimeUnit.MICROSECONDS.sleep(1); //限制传输速度
+        }
+        fis.close();
     }
 }
