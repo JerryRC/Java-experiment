@@ -23,7 +23,7 @@ public class FileServer {
         int tcpPort = 2021;
         //Tcp 端口
         serverSocketT = new ServerSocket(tcpPort, 2);
-        serverSocketT.setSoTimeout(3000);
+        serverSocketT.setSoTimeout(10 * 1000);
         //随机端口
         serverSocketU = new DatagramSocket();
         System.out.println("服务器启动。");
@@ -122,6 +122,7 @@ public class FileServer {
 //                System.out.println(cwd + "  " + currentPath.getCanonicalPath());
 
                 socket = serverSocketT.accept();    //等待连接，创建套接字，抛出 timeout
+                socket.setSoTimeout(30 * 1000);     //客户端长时间未响应
                 count = 0;  //超时置零
 
                 int udpPort = 2020; //题目要求端口
@@ -140,9 +141,7 @@ public class FileServer {
                 //装饰输出流，true,每写一行就刷新输出缓冲区，不用flush
                 PrintWriter pw = new PrintWriter(bw, true);
 
-                bw.write("CWD: " + currentPath);       //告知 client 当前工作路径
-                bw.newLine();
-                bw.flush();
+                pw.println("CWD: " + currentPath);  //告知 client 当前工作路径
 
                 String info; //接收用户输入的信息
 

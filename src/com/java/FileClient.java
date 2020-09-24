@@ -45,7 +45,6 @@ public class FileClient {
             String msg; //接受用户信息
 
             while ((msg = in.next()) != null) {
-//                System.out.println("command begin");
 
                 //退出
                 if (msg.trim().equals("bye")) {
@@ -55,52 +54,59 @@ public class FileClient {
                 //发送给服务器端
                 pw.println(msg);
 
-                //get 命令接收
-                if (msg.trim().startsWith("get ")) {
-                    String tmp = br.readLine();
-                    if (tmp.equals("unknown file")) {
-                        System.out.println("unknown file");
-                    } else {
-                        System.out.println(tmp);
-                        StringTokenizer st = new StringTokenizer(tmp, ";");
-                        //name of the file
-                        String name = st.nextToken();
-                        FileOutputStream fileOutputStream = new FileOutputStream("./" + name);
+                try {
+                    //get 命令接收
+                    if (msg.trim().startsWith("get ")) {
+                        String tmp = br.readLine();
+                        if (tmp.equals("unknown file")) {
+                            System.out.println("unknown file");
+                        } else {
+                            System.out.println(tmp);
+                            StringTokenizer st = new StringTokenizer(tmp, ";");
+                            //name of the file
+                            String name = st.nextToken();
+                            FileOutputStream fileOutputStream = new FileOutputStream("./" + name);
 
-                        //size of the file (Byte)
-                        String size = st.nextToken();
+                            //size of the file (Byte)
+                            String size = st.nextToken();
 
-                        long space = Long.parseLong(size);   //total size
-                        double times = Math.ceil((float) space / 512);   //circulate times
-                        byte[][] buf = new byte[(int) times][513];  //file stream buffer
-                        int last_length = 0;    //the last datagram's length
+                            long space = Long.parseLong(size);   //total size
+                            double times = Math.ceil((float) space / 512);   //circulate times
+                            byte[][] buf = new byte[(int) times][513];  //file stream buffer
+                            int last_length = 0;    //the last datagram's length
 
-                        for (int i = 0; i < (int) times; i++) {
-                            DatagramPacket datagramPacket = new DatagramPacket(new byte[513], 513);
-                            socketU.receive(datagramPacket);
-                            byte[] part = datagramPacket.getData();
-                            //把对应编号的 part 放到对应 buf
-                            buf[part[0]] = part;
-                            last_length = datagramPacket.getLength();
+                            for (int i = 0; i < (int) times; i++) {
+                                DatagramPacket datagramPacket = new DatagramPacket(new byte[513], 513);
+                                socketU.receive(datagramPacket);
+                                byte[] part = datagramPacket.getData();
+                                //把对应编号的 part 放到对应 buf
+                                buf[part[0]] = part;
+                                last_length = datagramPacket.getLength();
 
+                            }
+
+                            //从 buf 写入文件
+                            for (int i = 0; i < (int) times - 1; i++) {
+                                fileOutputStream.write(buf[i], 1, 512);
+                            }
+                            for (int i = 1; i < last_length; i++) {
+                                fileOutputStream.write(buf[(int) times - 1][i]);
+                            }
+                            fileOutputStream.close();
                         }
-
-                        //从 buf 写入文件
-                        for (int i = 0; i < (int) times - 1; i++) {
-                            fileOutputStream.write(buf[i], 1, 512);
-                        }
-                        for (int i = 1; i < last_length; i++) {
-                            fileOutputStream.write(buf[(int) times - 1][i]);
-                        }
-                        fileOutputStream.close();
                     }
-                }
-                String res;
+                    String res;
 
-                while (!(res = br.readLine()).equals("end up this command")) {
-                    System.out.println(res); //逐行输出服务器返回的消息
+                    //处理除了 get 外的其他类指令返回值
+                    while (!(res = br.readLine()).equals("end up this command")) {
+                        System.out.println(res); //逐行输出服务器返回的消息
+                    }
+                } catch (IOException e) {
+                    //服务器超时，或者服务器异常退出
+                    System.out.println("Sorry, the server has closed the connection.");
+                    break;
                 }
-//                System.out.println("command done");
+
             }
         } catch (IOException e) {
             e.printStackTrace();
