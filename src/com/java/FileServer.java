@@ -2,6 +2,7 @@ package com.java;
 
 import java.io.*;
 import java.net.*;
+import java.util.StringTokenizer;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -170,18 +171,31 @@ public class FileServer {
                         if (result.equals("unknown file")) {
                             pw.println(result);
                         } else {
+                            //得到文件名
+                            StringTokenizer st = new StringTokenizer(result, "\\");
+                            String name = "";
+                            while (st.hasMoreTokens()) {
+                                name = st.nextToken();
+                            }
+
                             File tmp = new File(result);
                             String space = String.valueOf(tmp.length());
-                            pw.println(space);
+                            pw.println(name + ";" + space);
 
                             //文件转换成 byte[] 输出
                             FileInputStream fis = new FileInputStream(tmp);
-                            byte[] part = new byte[512];
+                            byte[] part = new byte[513];
+
+                            //纠错编号
+                            int index = 0;
                             int size;
-                            while ((size = fis.read(part)) != -1) {
+                            while ((size = fis.read(part, 1, 512)) != -1) {
+                                //加入标号
+                                part[0] = (byte) index;
+                                index += 1;
                                 //创建 Udp 包裹
                                 DatagramPacket datagramPacket = new DatagramPacket(part,
-                                        size, socketAddress);
+                                        size + 1, socketAddress);
                                 serverSocketU.send(datagramPacket);
                                 TimeUnit.MICROSECONDS.sleep(1); //限制传输速度
                             }
@@ -193,8 +207,8 @@ public class FileServer {
                     } else {
                         pw.println("unknown cmd"); //无法解析指令
                     }
-
-                    bw.write("end up this command");    //再加一行标识让 client 端的 readLine() 函数能退出阻塞
+                    //再加一行标识让 client 端的 readLine() 函数能退出阻塞
+                    bw.write("end up this command");
                     bw.newLine();
                     bw.flush();
                 }

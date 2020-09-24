@@ -6,6 +6,7 @@ import java.net.DatagramSocket;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.util.Scanner;
+import java.util.StringTokenizer;
 
 /**
  * Client
@@ -60,17 +61,38 @@ public class FileClient {
                     if (tmp.equals("unknown file")) {
                         System.out.println("unknown file");
                     } else {
-                        //size of the file (Byte)
                         System.out.println(tmp);
-                        long space = Long.parseLong(tmp);   //total size
-                        long times = space / 512 + 1;   //circulate times
-                        for (int i = 0; i < times; i++) {
-                            DatagramPacket datagramPacket = new DatagramPacket(new byte[512], 512);
+                        StringTokenizer st = new StringTokenizer(tmp, ";");
+                        //name of the file
+                        String name = st.nextToken();
+                        FileOutputStream fileOutputStream = new FileOutputStream("./" + name);
+
+                        //size of the file (Byte)
+                        String size = st.nextToken();
+
+                        long space = Long.parseLong(size);   //total size
+                        double times = Math.ceil((float) space / 512);   //circulate times
+                        byte[][] buf = new byte[(int) times][513];  //file stream buffer
+                        int last_length = 0;    //the last datagram's length
+
+                        for (int i = 0; i < (int) times; i++) {
+                            DatagramPacket datagramPacket = new DatagramPacket(new byte[513], 513);
                             socketU.receive(datagramPacket);
                             byte[] part = datagramPacket.getData();
-
+                            //把对应编号的 part 放到对应 buf
+                            buf[part[0]] = part;
+                            last_length = datagramPacket.getLength();
 
                         }
+
+                        //从 buf 写入文件
+                        for (int i = 0; i < (int) times - 1; i++) {
+                            fileOutputStream.write(buf[i], 1, 512);
+                        }
+                        for (int i = 1; i < last_length; i++) {
+                            fileOutputStream.write(buf[(int) times - 1][i]);
+                        }
+                        fileOutputStream.close();
                     }
                 }
                 String res;
