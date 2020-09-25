@@ -5,6 +5,7 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.util.Collections;
 import java.util.Scanner;
 import java.util.StringTokenizer;
 
@@ -57,12 +58,12 @@ public class FileClient {
 
     /**
      * 得到准备接受命令之后的处理
+     * 由于纠错序列只启用了一个字节 也就是8位号码，所以对于大文件暂时把纠错buffer注释掉了
      *
      * @param tmp 得到的文件名以及大小信息
      * @throws IOException 文件创建失败以及无效socket的错误
      */
     private void downloadFile(String tmp) throws IOException {
-        System.out.println(tmp);
         StringTokenizer st = new StringTokenizer(tmp, ";");
 
         String name = st.nextToken();   //name of the file
@@ -72,27 +73,40 @@ public class FileClient {
         long space = Long.parseLong(size);   //total size
 
         double times = Math.ceil((float) space / 512);   //circulate times
-        byte[][] buf = new byte[(int) times][513];  //file stream buffer
-        int last_length = 0;    //the last datagram's length
+//        byte[][] buf = new byte[(int) times][513];  //file stream buffer
+        int last_length;    //the last datagram's length
+
+        //进度条
+        int bar_len = 50;
 
         //write to the buf before creating the file
         for (int i = 0; i < (int) times; i++) {
+
+            //进度条
+            String real_bar = String.join("", Collections.nCopies((int) ((i + 1) / times * bar_len), "#"));
+            String space_bar = String.join("", Collections.nCopies((bar_len - real_bar.length()), " "));
+            String bar = String.format("\rPercent: [%s%s] %d%%", real_bar, space_bar, (int) ((i + 1) * 100 / times));
+            System.out.print(bar);
+
             DatagramPacket datagramPacket = new DatagramPacket(new byte[513], 513);
             socketU.receive(datagramPacket);
             byte[] part = datagramPacket.getData();
             //put the part into the corresponding numbered buffer
-            buf[part[0]] = part;
+//            buf[part[0]] = part;
             last_length = datagramPacket.getLength();
+            fileOutputStream.write(part, 1, last_length - 1);
         }
 
         //creating the file from buffer
-        for (int i = 0; i < (int) times - 1; i++) {
-            fileOutputStream.write(buf[i], 1, 512);
-        }
-        for (int i = 1; i < last_length; i++) {
-            fileOutputStream.write(buf[(int) times - 1][i]);
-        }
+//        for (int i = 0; i < (int) times - 1; i++) {
+//            fileOutputStream.write(buf[i], 1, 512);
+//        }
+//        for (int i = 1; i < last_length; i++) {
+//            fileOutputStream.write(buf[(int) times - 1][i]);
+//        }
         fileOutputStream.close();
+
+        System.out.println();
     }
 
     /**
@@ -123,7 +137,6 @@ public class FileClient {
                             downloadFile(tmp);
                         }
                     }
-
                     //处理除了get外的其他指令返回值
                     String res;
                     while (!(res = br.readLine()).equals("end up this command")) {

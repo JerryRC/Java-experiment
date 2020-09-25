@@ -72,7 +72,7 @@ public class FileServerThreadPool {
             try {
                 String currentPath = cwd.trim();    //每次新连接都跳转到服务器指定目录 arg[0]
                 socket = serverSocketT.accept();    //等待用户连接
-                socket.setSoTimeout(30 * 1000);     //客户端长时间未响应
+                socket.setSoTimeout(60 * 1000);     //客户端长时间未响应
                 count = 0;  //连续超时次数置零
                 executorService.execute(new Handler(currentPath, socket, serverSocketU)); // 把执行交给线程池来维护
             } catch (IOException e) {
