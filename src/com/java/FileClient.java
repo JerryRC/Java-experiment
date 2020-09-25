@@ -72,9 +72,7 @@ public class FileClient {
         String size = st.nextToken();   //size of the file (Byte)
         long space = Long.parseLong(size);   //total size
 
-        double times = Math.ceil((float) space / 512);   //circulate times
-//        byte[][] buf = new byte[(int) times][513];  //file stream buffer
-        int last_length;    //the last datagram's length
+        double times = Math.ceil((float) space / (1024));   //circulate times
 
         //进度条
         int bar_len = 50;
@@ -82,31 +80,22 @@ public class FileClient {
         //write to the buf before creating the file
         for (int i = 0; i < (int) times; i++) {
 
-            //进度条
+            //progress bar
             String real_bar = String.join("", Collections.nCopies((int) ((i + 1) / times * bar_len), "#"));
             String space_bar = String.join("", Collections.nCopies((bar_len - real_bar.length()), " "));
             String bar = String.format("\rPercent: [%s%s] %d%%", real_bar, space_bar, (int) ((i + 1) * 100 / times));
             System.out.print(bar);
 
-            DatagramPacket datagramPacket = new DatagramPacket(new byte[513], 513);
+            DatagramPacket datagramPacket = new DatagramPacket(new byte[1024], 1024);
             socketU.receive(datagramPacket);
             byte[] part = datagramPacket.getData();
-            //put the part into the corresponding numbered buffer
-//            buf[part[0]] = part;
-            last_length = datagramPacket.getLength();
-            fileOutputStream.write(part, 1, last_length - 1);
+            int last_length = datagramPacket.getLength();
+            fileOutputStream.write(part, 0, last_length);
         }
 
-        //creating the file from buffer
-//        for (int i = 0; i < (int) times - 1; i++) {
-//            fileOutputStream.write(buf[i], 1, 512);
-//        }
-//        for (int i = 1; i < last_length; i++) {
-//            fileOutputStream.write(buf[(int) times - 1][i]);
-//        }
         fileOutputStream.close();
 
-        System.out.println();
+        System.out.println("\nFinish!");
     }
 
     /**

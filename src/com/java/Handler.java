@@ -224,19 +224,14 @@ public class Handler implements Runnable {
 
         //文件转换成 byte[] 输出
         FileInputStream fis = new FileInputStream(tmp);
-        byte[] part = new byte[513];
+        byte[] part = new byte[1024]; //1KB
 
-        //纠错编号
-        int index = 0;
         int size;
-        while ((size = fis.read(part, 1, 512)) != -1) {
-            //加入标号
-            part[0] = (byte) index;
-            index += 1;
+        while ((size = fis.read(part)) != -1) {
             DatagramPacket datagramPacket = new DatagramPacket(part,
-                    size + 1, socketAddress);   //创建 Udp 包裹
+                    size, socketAddress);   //创建 Udp 包裹
             serverSocketU.send(datagramPacket);
-            TimeUnit.MICROSECONDS.sleep(1); //限制传输速度
+            TimeUnit.MICROSECONDS.sleep(1); //限制传输速度 以防到达顺序错乱
         }
         fis.close();
     }
